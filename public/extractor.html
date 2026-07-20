@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en" class="dark h-full overflow-hidden">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>extract.pics — Image Extractor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com">
+    </script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gallery-img {
+            object-fit: cover;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .gallery-img:hover {
+            transform: scale(1.03);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+        }
+        @keyframes pulse-dot {
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.3;
+            }
+        }
+        .pulse-dot {
+            animation: pulse-dot 1.2s ease-in-out infinite;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #374151;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #6b7280;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-full flex flex-col overflow-hidden text-xs">
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-3 right-3 z-50 space-y-2 max-w-xs w-full pointer-events-none"></div>
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 shadow-md flex-shrink-0">
+        <div class="max-w-5xl mx-auto px-2 py-1.5 flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+                <i class="fas fa-camera text-lg text-primary-400"></i>
+                <div class="flex flex-col leading-tight">
+                    <span class="font-bold text-sm text-white">extract.pics</span>
+                    <span class="text-[10px] text-primary-400 font-semibold">Web Extractor + DB</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="dbStatus" class="text-[10px] px-2 py-1 rounded-full bg-gray-700 text-gray-400 font-medium whitespace-nowrap">
+                    <i class="fas fa-database mr-1"></i> DB: <span id="dbStatusText">Offline</span>
+                </span>
+                <span id="creditBadge" class="hidden text-[10px] px-2 py-1 rounded-full bg-gray-700 text-gray-300 font-medium whitespace-nowrap">
+                    <i class="fas fa-bolt mr-1"></i><span id="creditEstimate">—</span> cr
+                </span>
+                <a href="https://extract.pics/docs/api" target="_blank" class="text-[10px] text-primary-400 hover:text-primary-300 font-medium hidden sm:inline transition">API Docs</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <main class="flex-1 overflow-y-auto overflow-x-hidden max-w-5xl mx-auto px-2 py-2 w-full space-y-2.5">
+
+        <!-- Debug Log -->
+        <div id="debugLog" class="bg-gray-800 rounded-lg border border-gray-700 p-2.5 text-[10px] space-y-1 hidden">
+            <div class="flex items-center justify-between mb-1">
+                <h3 class="text-xs font-bold text-gray-300">Status Log</h3>
+                <button id="clearLogBtn" class="text-[10px] text-gray-400 hover:text-gray-200 transition">Clear</button>
+            </div>
+            <div id="logContent" class="text-gray-400 max-h-24 overflow-y-auto"></div>
+        </div>
+
+        <!-- API Key Card -->
+        <div class="bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-2.5">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-sm font-bold text-white flex items-center gap-1.5">
+                    <i class="fas fa-key text-primary-400 text-xs"></i> API Key
+                </h2>
+                <button id="clearKeyBtn" class="text-[10px] text-red-400 hover:text-red-300 font-medium hidden transition">Clear</button>
+            </div>
+            <div class="flex gap-2 flex-col sm:flex-row">
+                <input type="password" id="apiKeyInput" placeholder="Paste your project API key…" autocomplete="off"
+                class="flex-1 min-w-0 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-xs font-mono text-gray-100 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 outline-none transition">
+                <button id="saveKeyBtn"
+                class="px-3 py-2 bg-primary-600 text-white rounded-lg font-semibold text-xs hover:bg-primary-700 transition whitespace-nowrap active:scale-95">
+                Save Key
+            </button>
+        </div>
+        <div class="flex items-center gap-2 mt-2">
+            <button id="testApiBtn" class="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-xs text-gray-300 hover:bg-gray-600 transition flex items-center gap-1.5">
+                <i class="fas fa-plug"></i> Test API Connection
+            </button>
+            <span id="testApiResult" class="text-[10px] text-gray-400 hidden"></span>
+        </div>
+        <p class="text-[10px] text-gray-400 mt-1 truncate">Your key is stored locally. Never shared.</p>
+    </div>
+
+    <!-- Extraction Form -->
+    <div class="bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-2.5">
+        <h2 class="text-sm font-bold text-white mb-2 flex items-center gap-1.5">
+            <i class="fas fa-rocket text-primary-400 text-xs"></i> New Extraction
+        </h2>
+
+        <div class="mb-2">
+            <label class="block text-xs font-semibold text-gray-300 mb-1">Page URL(s)</label>
+            <textarea id="urlInput" rows="2" placeholder="https://example.com&#10;https://example.org/page"
+            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-xs text-gray-100 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 outline-none transition resize-none"
+        ></textarea>
+        <p class="text-[10px] text-gray-400 mt-1 break-words">One URL per line. A <code class="bg-gray-600 px-1 rounded text-[10px] text-gray-200">batch_id</code> will be returned.</p>
+    </div>
+
+    <div class="mb-2">
+        <label class="block text-xs font-semibold text-gray-300 mb-1">Upload Files <span class="text-gray-500 font-normal">(opt)</span></label>
+        <label for="fileInput" class="cursor-pointer inline-flex items-center gap-2 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-xs text-gray-300 hover:border-gray-500 transition w-full">
+            <i class="fas fa-upload text-primary-400"></i>
+            <span id="fileLabel">Choose files</span>
+        </label>
+        <input type="file" id="fileInput" multiple accept=".pdf,.pptx,.odp,.key,.docx,.doc,.odt,.zip" class="hidden">
+        <p class="text-[10px] text-gray-400 mt-1 break-words">Supports PDF, PPTX, ODP, KEY, DOCX, DOC, ODT, ZIP.</p>
+    </div>
+
+    <div class="flex flex-wrap gap-2 mb-2">
+        <div class="flex-1 min-w-[120px]">
+            <label class="block text-xs font-semibold text-gray-300 mb-1">Mode</label>
+            <select id="modeSelect"
+            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-xs text-gray-100 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 outline-none transition">
+            <option value="basic">Basic (1 credit)</option>
+            <option value="advanced" selected>Advanced (2 credits)</option>
+        </select>
+    </div>
+    <div class="flex items-end pb-1">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="ignoreInlineCheckbox" class="w-3.5 h-3.5 rounded border-gray-500 bg-gray-700 text-primary-600 focus:ring-primary-500">
+            <span class="text-xs text-gray-300 font-medium truncate">Ignore inline images</span>
+        </label>
+    </div>
+</div>
+
+<button id="extractBtn"
+class="w-full py-2.5 bg-primary-600 text-white rounded-lg font-bold text-xs hover:bg-primary-700 transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+<svg id="extractSpinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+</svg>
+<span id="extractBtnText">Extract Images</span>
+</button>
+</div>
+
+<!-- Active Jobs -->
+<div id="activeJobsSection" class="hidden bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-2.5">
+    <h2 class="text-sm font-bold text-white mb-2 flex items-center gap-1.5">
+        <i class="fas fa-list-check text-primary-400 text-xs"></i> Active & Recent
+    </h2>
+    <div id="jobsList" class="space-y-2"></div>
+</div>
+
+<!-- Results Gallery -->
+<div id="resultsSection" class="hidden bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-2.5">
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <h2 class="text-sm font-bold text-white flex items-center gap-1.5 min-w-0">
+            <i class="fas fa-image text-primary-400 text-xs flex-shrink-0"></i>
+            <span class="truncate">Results — <span id="resultTitle" class="text-primary-400">—</span></span>
+        </h2>
+        <div class="flex gap-2 flex-shrink-0">
+            <button id="saveToDbBtn" class="text-[10px] px-2.5 py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-700 font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled>
+            <i class="fas fa-database mr-1"></i> Save to DB
+        </button>
+        <button id="selectAllBtn" class="text-[10px] px-2.5 py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-700 font-medium transition">Select All</button>
+        <button id="downloadSelectedBtn"
+        class="text-[10px] px-3 py-1.5 rounded-lg bg-primary-600 text-white font-semibold hover:bg-primary-700 transition disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
+        <i class="fas fa-download mr-1"></i> Download
+    </button>
+</div>
+</div>
+<div id="galleryGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5"></div>
+<div id="noImagesMsg" class="hidden text-center py-8 text-gray-500 text-xs font-medium">No images found.</div>
+</div>
+</main>
+
+<!-- Footer -->
+<footer class="bg-gray-800 border-t border-gray-700 flex-shrink-0">
+    <div class="max-w-5xl mx-auto px-2 py-1.5 flex flex-col sm:flex-row gap-1 text-[10px] text-gray-400">
+        <span class="truncate">&copy; 2026 extract.pics — Unofficial Client</span>
+        <div class="flex gap-3 sm:ml-auto flex-wrap">
+            <a href="db-login.html" class="hover:text-gray-200 transition">DB Login</a>
+            <a href="project-manager.html" class="hover:text-gray-200 transition">Projects</a>
+            <a href="https://extract.pics/docs/api" target="_blank" class="hover:text-gray-200 transition">API Docs</a>
+            <a href="https://status.extract.pics" target="_blank" class="hover:text-gray-200 transition">Status</a>
+            <a href="https://extract.pics/changelog" target="_blank" class="hover:text-gray-200 transition">Changelog</a>
+        </div>
+    </div>
+</footer>
+
+<!-- Script Block 1: Extraction Logic -->
+<script>
+    (function() {
+        const PROXY_URL = 'https://extract-pics-proxy.vercel.app/api/proxy/v0';
+        const API_BASE = PROXY_URL;
+
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const saveKeyBtn = document.getElementById('saveKeyBtn');
+        const clearKeyBtn = document.getElementById('clearKeyBtn');
+        const urlInput = document.getElementById('urlInput');
+        const fileInput = document.getElementById('fileInput');
+        const fileLabel = document.getElementById('fileLabel');
+        const modeSelect = document.getElementById('modeSelect');
+        const ignoreInlineCheckbox = document.getElementById('ignoreInlineCheckbox');
+        const extractBtn = document.getElementById('extractBtn');
+        const extractSpinner = document.getElementById('extractSpinner');
+        const extractBtnText = document.getElementById('extractBtnText');
+        const activeJobsSection = document.getElementById('activeJobsSection');
+        const jobsList = document.getElementById('jobsList');
+        const resultsSection = document.getElementById('resultsSection');
+        const resultTitle = document.getElementById('resultTitle');
+        const galleryGrid = document.getElementById('galleryGrid');
+        const noImagesMsg = document.getElementById('noImagesMsg');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
+        const saveToDbBtn = document.getElementById('saveToDbBtn');
+        const creditBadge = document.getElementById('creditBadge');
+        const creditEstimate = document.getElementById('creditEstimate');
+        const toastContainer = document.getElementById('toast-container');
+        const debugLog = document.getElementById('debugLog');
+        const logContent = document.getElementById('logContent');
+        const clearLogBtn = document.getElementById('clearLogBtn');
+        const testApiBtn = document.getElementById('testApiBtn');
+        const testApiResult = document.getElementById('testApiResult');
+
+        let apiKey = localStorage.getItem('extract_pics_api_key') || '';
+        let extractions = JSON.parse(localStorage.getItem('extract_pics_extractions') || '[]');
+        let pollingIntervals = {};
+        let selectedImageIds = new Set();
+        let currentViewExtractionId = null;
+
+        window._extractions = extractions;
+
+        function log(msg, className = 'text-gray-400') {
+            debugLog.classList.remove('hidden');
+            const time = new Date().toLocaleTimeString();
+            logContent.innerHTML += `<div class="${className}">[${time}] ${msg}</div>`;
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        clearLogBtn.addEventListener('click', () => {
+            logContent.innerHTML = '';
+            debugLog.classList.add('hidden');
+        });
+
+        fileInput.addEventListener('change', () => {
+            const count = fileInput.files.length;
+            fileLabel.textContent = count > 0 ? `${count} file(s) selected` : 'Choose files';
+            updateCreditEstimate();
+        });
+
+        function init() {
+            if (apiKey) {
+                apiKeyInput.value = apiKey;
+                apiKeyInput.type = 'password';
+                clearKeyBtn.classList.remove('hidden');
+                saveKeyBtn.textContent = 'Update';
+            }
+            renderJobs();
+            if (extractions.length > 0) {
+                activeJobsSection.classList.remove('hidden');
+                const lastDone = [...extractions].reverse().find(e => e.status === 'done');
+                if (lastDone) viewExtractionResults(lastDone.id);
+            }
+            updateCreditEstimate();
+            updateSaveButtonState();
+        }
+
+        function showToast(message, type = 'info') {
+            const colors = {
+                success: 'bg-green-600 text-white',
+                error: 'bg-red-600 text-white',
+                info: 'bg-gray-700 text-gray-100',
+                warning: 'bg-amber-600 text-white',
+            };
+            const icons = {
+                success: '<i class="fas fa-check-circle"></i>',
+                error: '<i class="fas fa-times-circle"></i>',
+                info: '<i class="fas fa-info-circle"></i>',
+                warning: '<i class="fas fa-exclamation-triangle"></i>',
+            };
+            const toast = document.createElement('div');
+            toast.className =
+                `pointer-events-auto ${colors[type] || colors.info} px-3 py-2 rounded-lg shadow-lg text-xs font-medium flex items-center gap-2 transition-all duration-300 translate-x-full opacity-0 max-w-full`;
+            toast.innerHTML = `<span>${icons[type] || ''}</span><span>${message}</span>`;
+            toastContainer.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('translate-x-full', 'opacity-0'));
+            setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+        window._showToast = showToast;
+
+        // Test API connection
+        testApiBtn.addEventListener('click', async () => {
+            if (!apiKey) {
+                showToast('Save your API key first.', 'warning');
+                return;
+            }
+            testApiBtn.disabled = true;
+            testApiBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Testing...';
+            testApiResult.classList.add('hidden');
+
+            try {
+                const res = await fetch(`${API_BASE}/extractions?limit=1`, {
+                    headers: { 'Authorization': `Bearer ${apiKey}` }
+                });
+                if (res.ok) {
+                    testApiResult.textContent = 'Connection OK';
+                    testApiResult.classList.remove('text-red-400');
+                    testApiResult.classList.add('text-green-400');
+                    testApiResult.classList.remove('hidden');
+                    log('API connection test successful', 'text-green-400');
+                } else {
+                    const err = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
+                    testApiResult.textContent = `Failed: ${err.message}`;
+                    testApiResult.classList.add('text-red-400');
+                    testApiResult.classList.remove('text-green-400');
+                    testApiResult.classList.remove('hidden');
+                    log(`API test failed: ${err.message}`, 'text-red-400');
+                }
+            } catch (err) {
+                testApiResult.textContent = `Error: ${err.message}`;
+                testApiResult.classList.add('text-red-400');
+                testApiResult.classList.remove('text-green-400');
+                testApiResult.classList.remove('hidden');
+                log(`API test error: ${err.message}`, 'text-red-400');
+            } finally {
+                testApiBtn.disabled = false;
+                testApiBtn.innerHTML = '<i class="fas fa-plug"></i> Test API Connection';
+            }
+        });
+
+        saveKeyBtn.addEventListener('click', () => {
+            const val = apiKeyInput.value.trim();
+            if (!val) { showToast('Enter a valid API key.', 'error'); return; }
+            apiKey = val;
+            localStorage.setItem('extract_pics_api_key', apiKey);
+            apiKeyInput.type = 'password';
+            clearKeyBtn.classList.remove('hidden');
+            saveKeyBtn.textContent = 'Update';
+            showToast('API key saved!', 'success');
+        });
+
+        clearKeyBtn.addEventListener('click', () => {
+            apiKey = '';
+            localStorage.removeItem('extract_pics_api_key');
+            apiKeyInput.value = '';
+            apiKeyInput.type = 'text';
+            clearKeyBtn.classList.add('hidden');
+            saveKeyBtn.textContent = 'Save Key';
+            showToast('API key cleared.', 'info');
+        });
+
+        function updateCreditEstimate() {
+            const urlLines = urlInput.value.trim().split('\n').filter(l => l.trim());
+            const fileCount = fileInput.files?.length || 0;
+            const totalSources = Math.max(urlLines.length, 1) + fileCount;
+            const perExtraction = modeSelect.value === 'advanced' ? 2 : 1;
+            creditEstimate.textContent = totalSources * perExtraction;
+            creditBadge.classList.toggle('hidden', totalSources <= 0);
+        }
+        urlInput.addEventListener('input', updateCreditEstimate);
+        modeSelect.addEventListener('change', updateCreditEstimate);
+
+        function saveExtractions() {
+            const slim = extractions.map(e => ({
+                id: e.id,
+                url: e.url,
+                urls: e.urls,
+                mode: e.mode,
+                status: e.status,
+                images: e.images || [],
+                createdAt: e.createdAt,
+                error: e.error,
+                projectId: e.projectId,
+                batchId: e.batchId,
+                file: e.file,
+            }));
+            localStorage.setItem('extract_pics_extractions', JSON.stringify(slim));
+        }
+
+        function upsertExtraction(data) {
+            const idx = extractions.findIndex(e => e.id === data.id);
+            if (idx >= 0) extractions[idx] = { ...extractions[idx], ...data };
+            else extractions.unshift(data);
+            if (extractions.length > 30) extractions.length = 30;
+            saveExtractions();
+        }
+
+        extractBtn.addEventListener('click', async () => {
+            if (!apiKey) { showToast('Save your API key first.', 'error'); return; }
+            const urlLines = urlInput.value.trim().split('\n').filter(l => l.trim());
+            const files = Array.from(fileInput.files || []);
+            if (urlLines.length === 0 && files.length === 0) { showToast('Enter a URL or upload a file.', 'warning'); return; }
+            const mode = modeSelect.value;
+            const ignoreInlineImages = ignoreInlineCheckbox.checked;
+
+            extractBtn.disabled = true;
+            extractSpinner.classList.remove('hidden');
+            extractBtnText.textContent = 'Starting…';
+            log(`Starting extraction (mode: ${mode})`);
+
+            try {
+                let res;
+                const headers = { 'Authorization': `Bearer ${apiKey}` };
+                if (files.length > 0 || (urlLines.length > 1 && files.length >= 0)) {
+                    const formData = new FormData();
+                    files.forEach(f => formData.append('files[]', f));
+                    urlLines.forEach(u => formData.append('urls[]', u));
+                    if (urlLines.length === 1 && files.length === 0) {
+                        formData.delete('urls[]');
+                        formData.append('url', urlLines[0]);
+                    }
+                    formData.append('mode', mode);
+                    if (ignoreInlineImages) formData.append('ignoreInlineImages', 'true');
+                    res = await fetch(`${API_BASE}/extractions`, {
+                        method: 'POST',
+                        headers: headers,
+                        body: formData,
+                    });
+                } else {
+                    const body = {};
+                    if (urlLines.length === 1) body.url = urlLines[0];
+                    else body.urls = urlLines;
+                    body.mode = mode;
+                    if (ignoreInlineImages) body.ignoreInlineImages = true;
+                    res = await fetch(`${API_BASE}/extractions`, {
+                        method: 'POST',
+                        headers: { ...headers, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                }
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
+                    throw new Error(errData.message || `HTTP ${res.status}`);
+                }
+                const json = await res.json();
+                const extData = json.data || json;
+                const extraction = {
+                    id: extData.id,
+                    url: urlLines.length === 1 ? urlLines[0] : null,
+                    urls: urlLines.length > 1 ? urlLines : null,
+                    files: files.length > 0 ? files.map(f => f.name) : null,
+                    mode,
+                    status: extData.status || 'pending',
+                    images: extData.images || [],
+                    createdAt: extData.created_at || new Date().toISOString(),
+                    projectId: extData.project_id,
+                    batchId: extData.batch_id || null,
+                    error: null,
+                };
+                upsertExtraction(extraction);
+                activeJobsSection.classList.remove('hidden');
+                renderJobs();
+                viewExtractionResults(extraction.id);
+                startPolling(extraction.id);
+                urlInput.value = '';
+                fileInput.value = '';
+                fileLabel.textContent = 'Choose files';
+                updateCreditEstimate();
+                log(`Extraction ${extraction.id.slice(0,8)}… started`, 'text-green-400');
+                showToast('Extraction started!', 'success');
+            } catch (err) {
+                log(`Extraction error: ${err.message}`, 'text-red-400');
+                showToast(`Error: ${err.message}`, 'error');
+            } finally {
+                extractBtn.disabled = false;
+                extractSpinner.classList.add('hidden');
+                extractBtnText.textContent = 'Extract Images';
+            }
+        });
+
+        function startPolling(extractionId) {
+            if (pollingIntervals[extractionId]) return;
+            const poll = async () => {
+                try {
+                    const res = await fetch(`${API_BASE}/extractions/${extractionId}`, {
+                        headers: { 'Authorization': `Bearer ${apiKey}` },
+                    });
+                    const json = await res.json();
+                    const data = json.data || json;
+                    upsertExtraction({ id: extractionId, status: data.status, images: data.images || [], error: data.status === 'error' ? (data.error || 'Unknown error') : null });
+                    renderJobs();
+                    if (currentViewExtractionId === extractionId) {
+                        renderGallery(extractionId);
+                        updateSaveButtonState();
+                    }
+                    if (data.status === 'done' || data.status === 'error') {
+                        clearInterval(pollingIntervals[extractionId]);
+                        delete pollingIntervals[extractionId];
+                        log(`Extraction ${extractionId.slice(0,8)}… ${data.status} (${(data.images || []).length} img)`, data.status === 'done' ? 'text-green-400' : 'text-red-400');
+                        showToast(`Extraction ${data.status}!`, data.status === 'done' ? 'success' : 'error');
+                    }
+                } catch (err) {
+                    log(`Poll error: ${err.message}`, 'text-red-400');
+                }
+            };
+            poll();
+            pollingIntervals[extractionId] = setInterval(poll, 2000);
+        }
+
+        function resumePolling() {
+            extractions.forEach(e => { if (e.status === 'pending' || e.status === 'running') startPolling(e.id); });
+        }
+
+        function renderJobs() {
+            if (extractions.length === 0) { activeJobsSection.classList.add('hidden'); return; }
+            activeJobsSection.classList.remove('hidden');
+            jobsList.innerHTML = extractions.map(e => {
+                const statusColors = {
+                    pending: 'bg-yellow-900/40 text-yellow-300 border-yellow-600',
+                    running: 'bg-blue-900/40 text-blue-300 border-blue-600',
+                    done: 'bg-green-900/40 text-green-300 border-green-600',
+                    error: 'bg-red-900/40 text-red-300 border-red-600',
+                };
+                const statusDots = {
+                    pending: '<span class="pulse-dot inline-block w-2 h-2 rounded-full bg-yellow-400 mr-1"></span>',
+                    running: '<span class="pulse-dot inline-block w-2 h-2 rounded-full bg-blue-400 mr-1"></span>',
+                    done: '<span class="inline-block w-2 h-2 rounded-full bg-green-400 mr-1"></span>',
+                    error: '<span class="inline-block w-2 h-2 rounded-full bg-red-400 mr-1"></span>',
+                };
+                const label = e.url || (e.urls && e.urls.join(', ')) || (e.files && e.files.join(', ')) || 'Unknown';
+                const shortLabel = label.length > 45 ? label.slice(0, 42) + '…' : label;
+                const imageCount = e.images ? e.images.length : 0;
+                const isActive = currentViewExtractionId === e.id;
+                return `
+                <div class="flex items-center justify-between p-2 rounded-lg border cursor-pointer transition hover:shadow-md ${isActive ? 'border-primary-500 bg-primary-900/30 ring-2 ring-primary-500/30' : 'border-gray-700 bg-gray-750 hover:bg-gray-700'}"
+                     data-extraction-id="${e.id}" onclick="window._viewExtraction('${e.id}')">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs font-semibold text-gray-100 truncate">${shortLabel}</p>
+                    <p class="text-[10px] text-gray-400 mt-0.5 truncate">${e.id.slice(0,10)}… · ${imageCount} img · ${new Date(e.createdAt).toLocaleTimeString()}</p>
+                  </div>
+                  <span class="text-[10px] px-2 py-1 rounded-full border font-semibold whitespace-nowrap ml-2 flex-shrink-0 ${statusColors[e.status] || statusColors.pending}">
+                    ${statusDots[e.status] || ''} ${e.status}
+                  </span>
+                </div>`;
+            }).join('');
+        }
+
+        window._viewExtraction = function(id) {
+            viewExtractionResults(id);
+            if (window.innerWidth < 640) resultsSection?.scrollIntoView({ behavior: 'smooth' });
+        };
+
+        function viewExtractionResults(extractionId) {
+            currentViewExtractionId = extractionId;
+            const ext = extractions.find(e => e.id === extractionId);
+            if (!ext) return;
+            resultsSection.classList.remove('hidden');
+            const label = ext.url || (ext.urls && ext.urls[0]) || (ext.files && ext.files[0]) || 'Extraction';
+            resultTitle.textContent = label.length > 35 ? label.slice(0, 32) + '…' : label;
+            selectedImageIds.clear();
+            renderGallery(extractionId);
+            renderJobs();
+            updateDownloadBtn();
+            updateSaveButtonState();
+        }
+
+        function updateSaveButtonState() {
+            const ext = extractions.find(e => e.id === currentViewExtractionId);
+            if (!ext || ext.status !== 'done') {
+                saveToDbBtn.disabled = true;
+                saveToDbBtn.title = 'Extraction must be completed before saving.';
+            } else {
+                saveToDbBtn.disabled = false;
+                saveToDbBtn.title = 'Save to D1 database.';
+            }
+        }
+
+        function renderGallery(extractionId) {
+            const ext = extractions.find(e => e.id === extractionId);
+            if (!ext) return;
+            const images = ext.images || [];
+            if (images.length === 0 && ext.status === 'done') {
+                galleryGrid.innerHTML = '';
+                noImagesMsg.classList.remove('hidden');
+                selectAllBtn.classList.add('hidden');
+                downloadSelectedBtn.classList.add('hidden');
+                return;
+            }
+            noImagesMsg.classList.add('hidden');
+            selectAllBtn.classList.remove('hidden');
+            downloadSelectedBtn.classList.remove('hidden');
+            galleryGrid.innerHTML = images.map((img, idx) => {
+                const imgUrl = img.url || '';
+                const imgId = img.id || `img-${idx}`;
+                const name = img.name || img.basename || imgUrl.split('/').pop()?.split('?')[0] || 'image';
+                const type = img.type || '';
+                const width = img.width || '';
+                const height = img.height || '';
+                const size = img.size ? formatBytes(img.size) : '';
+                const metaParts = [type, width && height ? `${width}×${height}` : '', size].filter(Boolean);
+                const metaStr = metaParts.length > 0 ? metaParts.join(' · ') : '';
+                const isSelected = selectedImageIds.has(imgId);
+                return `
+                <div class="relative group rounded-lg border border-gray-700 bg-gray-800 overflow-hidden shadow-sm hover:shadow-lg transition flex flex-col"
+                     data-image-id="${imgId}">
+                  <div class="aspect-[4/3] bg-gray-700 flex items-center justify-center overflow-hidden relative">
+                    <img src="${imgUrl}" alt="${name}" loading="lazy"
+                         class="gallery-img w-full h-full object-cover"
+                         onerror="this.parentElement.innerHTML='<div class=\\'text-gray-500 text-[10px] p-3 text-center\\'><i class=\\'fas fa-exclamation-triangle\\'></i> Unable to preview</div>'">
+                    <button class="absolute top-2 right-2 w-6 h-6 rounded-full bg-gray-900/80 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-primary-600 hover:text-white"
+                            title="Download"
+                            onclick="event.stopPropagation();window._downloadSingle('${extractionId}','${imgId}','${name.replace(/'/g, "\\'")}.${type || 'png'}')">
+                      <i class="fas fa-download text-[10px]"></i>
+                    </button>
+                    <label class="absolute top-2 left-2 w-5 h-5 flex items-center justify-center cursor-pointer bg-gray-900/80 rounded shadow" onclick="event.stopPropagation()">
+                      <input type="checkbox" class="sr-only gallery-checkbox" data-image-id="${imgId}" ${isSelected ? 'checked' : ''}
+                             onchange="window._toggleImageSelect('${imgId}', this.checked)">
+                      <i class="fas fa-check text-primary-400 text-[10px] ${isSelected ? '' : 'hidden'} check-mark"></i>
+                    </label>
+                  </div>
+                  <div class="p-2.5 flex-1 flex flex-col justify-between">
+                    <p class="text-[10px] font-semibold text-gray-200 truncate" title="${name}">${name}</p>
+                    ${metaStr ? `<p class="text-[9px] text-gray-400 mt-0.5 truncate">${metaStr}</p>` : ''}
+                    <a href="${imgUrl}" target="_blank" class="text-[9px] text-primary-400 hover:text-primary-300 mt-1 truncate block break-words"><i class="fas fa-external-link-alt mr-1"></i>Open</a>
+                  </div>
+                </div>`;
+            }).join('');
+            document.querySelectorAll('.gallery-checkbox').forEach(cb => {
+                if (selectedImageIds.has(cb.dataset.imageId)) {
+                    cb.checked = true;
+                    cb.nextElementSibling?.classList.remove('hidden');
+                }
+            });
+            updateDownloadBtn();
+        }
+
+        window._toggleImageSelect = function(imgId, checked) {
+            if (checked) selectedImageIds.add(imgId);
+            else selectedImageIds.delete(imgId);
+            updateDownloadBtn();
+            const cb = document.querySelector(`.gallery-checkbox[data-image-id="${imgId}"]`);
+            if (cb) {
+                const icon = cb.nextElementSibling;
+                if (checked) icon?.classList.remove('hidden');
+                else icon?.classList.add('hidden');
+            }
+        };
+
+        function updateDownloadBtn() {
+            if (downloadSelectedBtn) {
+                downloadSelectedBtn.disabled = selectedImageIds.size === 0;
+                downloadSelectedBtn.innerHTML = selectedImageIds.size > 0 ? `<i class="fas fa-download mr-1"></i> Download (${selectedImageIds.size})` : '<i class="fas fa-download mr-1"></i> Download';
+            }
+        }
+
+        selectAllBtn.addEventListener('click', () => {
+            const ext = extractions.find(e => e.id === currentViewExtractionId);
+            if (!ext || !ext.images) return;
+            const allSelected = selectedImageIds.size === ext.images.length;
+            if (allSelected) {
+                selectedImageIds.clear();
+                selectAllBtn.textContent = 'Select All';
+            } else {
+                ext.images.forEach(img => selectedImageIds.add(img.id));
+                selectAllBtn.textContent = 'Deselect All';
+            }
+            renderGallery(currentViewExtractionId);
+            updateDownloadBtn();
+        });
+
+        window._downloadSingle = async function(extractionId, imageId, filename) {
+            if (!apiKey) { showToast('API key required.', 'error'); return; }
+            try {
+                showToast('Downloading…', 'info');
+                const res = await fetch(`${API_BASE}/downloads/single`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ extraction: extractionId, image: imageId }),
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const blob = await res.blob();
+                triggerBlobDownload(blob, filename || `image-${imageId}.png`);
+                showToast('Download complete!', 'success');
+            } catch (err) {
+                showToast(`Download failed: ${err.message}`, 'error');
+            }
+        };
+
+        downloadSelectedBtn.addEventListener('click', async () => {
+            if (!apiKey || selectedImageIds.size === 0) return;
+            const ext = extractions.find(e => e.id === currentViewExtractionId);
+            if (!ext) return;
+            const imageIds = Array.from(selectedImageIds);
+            try {
+                downloadSelectedBtn.disabled = true;
+                downloadSelectedBtn.innerHTML = '<i class="fas fa-spinner fa-pulse mr-1"></i> Creating ZIP…';
+                showToast(`Packaging ${imageIds.length} image(s)…`, 'info');
+                const res = await fetch(`${API_BASE}/downloads/multiple`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ extraction: currentViewExtractionId, images: imageIds, options: { keepOrder: true } }),
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const blob = await res.blob();
+                triggerBlobDownload(blob, `extraction-${currentViewExtractionId.slice(0,8)}-images.zip`);
+                showToast('ZIP download complete!', 'success');
+            } catch (err) {
+                showToast(`Download failed: ${err.message}`, 'error');
+            } finally {
+                downloadSelectedBtn.disabled = false;
+                updateDownloadBtn();
+            }
+        });
+
+        saveToDbBtn.addEventListener('click', async () => {
+            const ext = extractions.find(e => e.id === currentViewExtractionId);
+            if (!ext) return;
+            if (window._db && window._db.saveExtraction) {
+                saveToDbBtn.disabled = true;
+                saveToDbBtn.innerHTML = '<i class="fas fa-spinner fa-pulse mr-1"></i> Saving…';
+                await window._db.saveExtraction(ext);
+                saveToDbBtn.disabled = false;
+                saveToDbBtn.innerHTML = '<i class="fas fa-database mr-1"></i> Save to DB';
+            } else {
+                showToast('Database module not loaded.', 'error');
+            }
+        });
+
+        function triggerBlobDownload(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function formatBytes(bytes) {
+            if (!bytes) return '';
+            if (bytes < 1024) return `${bytes} B`;
+            if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+            return `${(bytes / 1048576).toFixed(1)} MB`;
+        }
+
+        init();
+        resumePolling();
+    })();
+</script>
+
+<!-- Script Block 2: Database Logic -->
+<script>
+    (function() {
+        const WORKER_URL = 'https://cf-db-api.rabiya3544.workers.dev';
+        const DB_NAME = 'extractpics';
+
+        function getToken() {
+            return localStorage.getItem('extract_pics_worker_token');
+        }
+
+        function escapeSQL(str) {
+            if (str == null) return 'NULL';
+            return `'${String(str).replace(/'/g, "''")}'`;
+        }
+
+        async function executeSQL(sql) {
+            const token = getToken();
+            if (!token) throw new Error('No DB token found. Please log in to the database first.');
+            const res = await fetch(`${WORKER_URL}/api/${DB_NAME}/exec`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': token
+                },
+                body: JSON.stringify({ sql })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            return data;
+        }
+
+        async function querySQL(sql) {
+            const token = getToken();
+            if (!token) throw new Error('No DB token found.');
+            const encoded = encodeURIComponent(sql);
+            const res = await fetch(`${WORKER_URL}/api/${DB_NAME}/query?sql=${encoded}`, {
+                headers: { 'x-api-key': token }
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            return data;
+        }
+
+        async function getProjectIdByApiKey(apiKey) {
+            const projects = await querySQL(`SELECT id FROM projects WHERE api_key=${escapeSQL(apiKey)} LIMIT 1`);
+            return projects.length > 0 ? projects[0].id : null;
+        }
+
+        async function saveExtractionToDB(extraction) {
+            const token = getToken();
+            if (!token) {
+                window._showToast('DB token missing. Extraction not saved to database.', 'warning');
+                return;
+            }
+
+            try {
+                const projectId = await getProjectIdByApiKey(localStorage.getItem('extract_pics_api_key') || '');
+
+                const statements = [];
+                const sourceUrl = extraction.url || (extraction.urls && extraction.urls[0]) || null;
+                const sourceFile = extraction.files && extraction.files[0] || null;
+
+                statements.push(`INSERT OR IGNORE INTO extractions (id, project_id, source_url, source_file, mode, status, batch_id, created_at)
+                    VALUES (
+                        ${escapeSQL(extraction.id)},
+                        ${escapeSQL(projectId)},
+                        ${escapeSQL(sourceUrl)},
+                        ${escapeSQL(sourceFile)},
+                        ${escapeSQL(extraction.mode)},
+                        ${escapeSQL(extraction.status)},
+                        ${escapeSQL(extraction.batchId)},
+                        ${escapeSQL(extraction.createdAt)}
+                    )`);
+
+                for (const img of (extraction.images || [])) {
+                    statements.push(`INSERT OR IGNORE INTO images (id, extraction_id, url, name, basename, type, size, width, height)
+                        VALUES (
+                            ${escapeSQL(img.id)},
+                            ${escapeSQL(extraction.id)},
+                            ${escapeSQL(img.url || '')},
+                            ${escapeSQL(img.name || null)},
+                            ${escapeSQL(img.basename || null)},
+                            ${escapeSQL(img.type || null)},
+                            ${img.size || 0},
+                            ${img.width || 0},
+                            ${img.height || 0}
+                        )`);
+                }
+
+                await executeSQL(statements.join('; '));
+                window._showToast('Extraction saved to DB.', 'success');
+            } catch (err) {
+                window._showToast(`DB save failed: ${err.message}`, 'error');
+            }
+        }
+
+        window._db = {
+            saveExtraction: saveExtractionToDB,
+            query: querySQL,
+            exec: executeSQL,
+            getProjectIdByApiKey
+        };
+
+        function updateDBStatus() {
+            const statusEl = document.getElementById('dbStatusText');
+            const badge = document.getElementById('dbStatus');
+            if (getToken()) {
+                statusEl.textContent = 'Online';
+                badge.classList.remove('bg-gray-700', 'text-gray-400');
+                badge.classList.add('bg-green-900/50', 'text-green-400');
+            } else {
+                statusEl.textContent = 'Offline';
+                badge.classList.remove('bg-green-900/50', 'text-green-400');
+                badge.classList.add('bg-gray-700', 'text-gray-400');
+            }
+        }
+        updateDBStatus();
+        window.addEventListener('storage', updateDBStatus);
+    })();
+</script>
+
+<!-- Script Block 3: Connector -->
+<script>
+    (function() {
+        // No automatic saving – user clicks "Save to DB" button.
+        // The button handler directly calls window._db.saveExtraction.
+    })();
+</script>
+</body>
+</html>
