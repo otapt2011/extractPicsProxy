@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en" class="dark h-full overflow-hidden">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Webhook Tester — extract.pics</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #374151; }
+        ::-webkit-scrollbar-thumb { background: #6b7280; border-radius: 2px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-full flex flex-col overflow-hidden text-xs">
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-3 right-3 z-50 space-y-2 max-w-xs w-full pointer-events-none"></div>
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 shadow-md flex-shrink-0">
+        <div class="max-w-5xl mx-auto px-2 py-1.5 flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+                <i class="fas fa-plug text-lg text-primary-400"></i>
+                <div class="flex flex-col leading-tight">
+                    <span class="font-bold text-sm text-white">Webhook Tester</span>
+                    <span class="text-[10px] text-primary-400 font-semibold">extract.pics</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="extractor.html" class="text-[10px] text-gray-400 hover:text-gray-200 transition">Extractor</a>
+                <a href="https://extract.pics/docs/api" target="_blank" class="text-[10px] text-primary-400 hover:text-primary-300 font-medium hidden sm:inline transition">API Docs</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <main class="flex-1 overflow-y-auto overflow-x-hidden max-w-5xl mx-auto px-2 py-2 w-full space-y-2.5">
+
+        <!-- Debug Log -->
+        <div id="debugLog" class="bg-gray-800 rounded-lg border border-gray-700 p-2.5 text-[10px] space-y-1 hidden">
+            <div class="flex items-center justify-between mb-1">
+                <h3 class="text-xs font-bold text-gray-300">Response Log</h3>
+                <button id="clearLogBtn" class="text-[10px] text-gray-400 hover:text-gray-200 transition">Clear</button>
+            </div>
+            <div id="logContent" class="text-gray-400 max-h-32 overflow-y-auto font-mono"></div>
+        </div>
+
+        <!-- Test Card -->
+        <div class="bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-2.5">
+            <h2 class="text-sm font-bold text-white mb-2 flex items-center gap-1.5">
+                <i class="fas fa-paper-plane text-primary-400 text-xs"></i> Test Webhook POST
+            </h2>
+
+            <div class="mb-2.5">
+                <label class="block text-xs font-semibold text-gray-300 mb-1">Webhook URL</label>
+                <input type="text" id="webhookUrlInput" value="https://extract-pics-hook.rabiya3544.workers.dev/webhook"
+                class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-xs text-gray-100 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 outline-none transition font-mono">
+            </div>
+
+            <div class="mb-2.5">
+                <label class="block text-xs font-semibold text-gray-300 mb-1">JSON Payload</label>
+                <textarea id="payloadTextarea" rows="8" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-xs text-gray-100 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 outline-none transition resize-none font-mono">{
+  "type": "extraction_done",
+  "data": {
+    "id": "test-123",
+    "status": "done",
+    "url": "https://example.com",
+    "images": [
+      {
+        "id": "img-1",
+        "url": "https://example.com/image.png",
+        "name": "image",
+        "basename": "image.png",
+        "type": "png",
+        "size": 185446,
+        "width": 1690,
+        "height": 420
+      }
+    ],
+    "project_id": "your-project-uuid",
+    "created_at": "2026-07-20T10:00:00.000Z"
+  }
+}</textarea>
+            </div>
+
+            <button id="sendBtn"
+            class="w-full py-2.5 bg-primary-600 text-white rounded-lg font-bold text-xs hover:bg-primary-700 transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+            <svg id="sendSpinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <span id="sendBtnText">Send Test Webhook</span>
+        </button>
+    </div>
+</main>
+
+<!-- Footer -->
+<footer class="bg-gray-800 border-t border-gray-700 flex-shrink-0">
+    <div class="max-w-5xl mx-auto px-2 py-1.5 flex flex-col sm:flex-row gap-1 text-[10px] text-gray-400">
+        <span>&copy; 2026 extract.pics — Webhook Tester</span>
+        <div class="flex gap-3 sm:ml-auto flex-wrap">
+            <a href="extractor.html" class="hover:text-gray-200 transition">Extractor</a>
+            <a href="https://extract.pics/docs/api" target="_blank" class="hover:text-gray-200 transition">API Docs</a>
+        </div>
+    </div>
+</footer>
+
+<script>
+    (function() {
+        const webhookUrlInput = document.getElementById('webhookUrlInput');
+        const payloadTextarea = document.getElementById('payloadTextarea');
+        const sendBtn = document.getElementById('sendBtn');
+        const sendSpinner = document.getElementById('sendSpinner');
+        const sendBtnText = document.getElementById('sendBtnText');
+        const debugLog = document.getElementById('debugLog');
+        const logContent = document.getElementById('logContent');
+        const clearLogBtn = document.getElementById('clearLogBtn');
+        const toastContainer = document.getElementById('toast-container');
+
+        function showToast(message, type = 'info') {
+            const colors = {
+                success: 'bg-green-600 text-white',
+                error: 'bg-red-600 text-white',
+                info: 'bg-gray-700 text-gray-100',
+                warning: 'bg-amber-600 text-white',
+            };
+            const icons = {
+                success: '<i class="fas fa-check-circle"></i>',
+                error: '<i class="fas fa-times-circle"></i>',
+                info: '<i class="fas fa-info-circle"></i>',
+                warning: '<i class="fas fa-exclamation-triangle"></i>',
+            };
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto ${colors[type] || colors.info} px-3 py-2 rounded-lg shadow-lg text-xs font-medium flex items-center gap-2 transition-all duration-300 translate-x-full opacity-0 max-w-full`;
+            toast.innerHTML = `<span>${icons[type] || ''}</span><span>${message}</span>`;
+            toastContainer.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('translate-x-full', 'opacity-0'));
+            setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        function log(msg, className = 'text-gray-400') {
+            debugLog.classList.remove('hidden');
+            const time = new Date().toLocaleTimeString();
+            logContent.innerHTML += `<div class="${className}">[${time}] ${msg}</div>`;
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        clearLogBtn.addEventListener('click', () => {
+            logContent.innerHTML = '';
+            debugLog.classList.add('hidden');
+        });
+
+        sendBtn.addEventListener('click', async () => {
+            const url = webhookUrlInput.value.trim();
+            if (!url) {
+                showToast('Please enter a webhook URL.', 'warning');
+                return;
+            }
+
+            let payload;
+            try {
+                payload = JSON.parse(payloadTextarea.value.trim());
+            } catch (e) {
+                showToast('Invalid JSON in payload.', 'error');
+                log('Invalid JSON payload', 'text-red-400');
+                return;
+            }
+
+            sendBtn.disabled = true;
+            sendSpinner.classList.remove('hidden');
+            sendBtnText.textContent = 'Sending…';
+            log(`Sending POST to ${url}`);
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const responseText = await res.text();
+                if (res.ok) {
+                    log(`Success (${res.status}): ${responseText || 'OK'}`, 'text-green-400');
+                    showToast('Webhook sent successfully!', 'success');
+                } else {
+                    log(`Failed (${res.status}): ${responseText}`, 'text-red-400');
+                    showToast(`Webhook failed with status ${res.status}`, 'error');
+                }
+            } catch (err) {
+                log(`Network error: ${err.message}`, 'text-red-400');
+                showToast(`Error: ${err.message}`, 'error');
+            } finally {
+                sendBtn.disabled = false;
+                sendSpinner.classList.add('hidden');
+                sendBtnText.textContent = 'Send Test Webhook';
+            }
+        });
+    })();
+</script>
+</body>
+</html>
